@@ -1,6 +1,7 @@
 const Interview = require("../models/Interview");
 const Resume = require("../models/Resume");
 const { generateJSON } = require("../utils/gemini");
+const { safeErrorMessage } = require("../utils/safeError");
 
 /* =========================================================
    AI INTERVIEW QUESTION GENERATOR
@@ -22,8 +23,15 @@ const generateQuestions = async (req, res) => {
     let resume = null;
 
     if (resumeId) {
-      resume = await Resume.findById(resumeId);
-      if (resume) {
+      const candidateResume = await Resume.findById(resumeId);
+      // Only use the resume as context (and link it to this interview) if
+      // it actually belongs to the requesting user — otherwise silently
+      // skip it rather than pulling another user's resume into context.
+      if (
+        candidateResume &&
+        candidateResume.user?.toString() === req.user._id.toString()
+      ) {
+        resume = candidateResume;
         resumeContext = `\nCandidate resume summary: ${
           resume.analysis?.summary || resume.resumeText.slice(0, 1200)
         }\nCandidate skills: ${(resume.analysis?.technicalSkills || []).join(
@@ -60,7 +68,7 @@ Return ONLY valid JSON, no markdown, no explanations, in exactly this format:
     const questions = parsed.questions || [];
 
     const interview = await Interview.create({
-      user: req.user ? req.user._id : undefined,
+      user: req.user._id,
       resume: resume ? resume._id : undefined,
       mode: "question-bank",
       role,
@@ -83,7 +91,7 @@ Return ONLY valid JSON, no markdown, no explanations, in exactly this format:
     console.error(error);
     return res.status(500).json({
       success: false,
-      message: error.message || "Failed to generate interview questions.",
+      message: safeErrorMessage(error, "Failed to generate interview questions."),
     });
   }
 };
@@ -107,8 +115,12 @@ const startMockInterview = async (req, res) => {
     let resume = null;
 
     if (resumeId) {
-      resume = await Resume.findById(resumeId);
-      if (resume) {
+      const candidateResume = await Resume.findById(resumeId);
+      if (
+        candidateResume &&
+        candidateResume.user?.toString() === req.user._id.toString()
+      ) {
+        resume = candidateResume;
         resumeContext = `\nCandidate resume summary: ${
           resume.analysis?.summary || resume.resumeText.slice(0, 1200)
         }`;
@@ -139,7 +151,7 @@ Return ONLY valid JSON in exactly this format:
     }));
 
     const interview = await Interview.create({
-      user: req.user ? req.user._id : undefined,
+      user: req.user._id,
       resume: resume ? resume._id : undefined,
       mode: "mock-interview",
       role,
@@ -158,7 +170,7 @@ Return ONLY valid JSON in exactly this format:
     console.error(error);
     return res.status(500).json({
       success: false,
-      message: error.message || "Failed to start mock interview.",
+      message: safeErrorMessage(error, "Failed to start mock interview."),
     });
   }
 };
@@ -179,7 +191,7 @@ const submitAnswer = async (req, res) => {
 
     const interview = await Interview.findById(interviewId);
 
-    if (!interview) {
+    if (!interview || interview.user?.toString() !== req.user._id.toString()) {
       return res.status(404).json({
         success: false,
         message: "Interview session not found.",
@@ -224,7 +236,7 @@ Return ONLY valid JSON in exactly this format:
     console.error(error);
     return res.status(500).json({
       success: false,
-      message: error.message || "Failed to evaluate answer.",
+      message: safeErrorMessage(error, "Failed to evaluate answer."),
     });
   }
 };
@@ -238,7 +250,7 @@ const finishMockInterview = async (req, res) => {
 
     const interview = await Interview.findById(interviewId);
 
-    if (!interview) {
+    if (!interview || interview.user?.toString() !== req.user._id.toString()) {
       return res.status(404).json({
         success: false,
         message: "Interview session not found.",
@@ -296,7 +308,7 @@ Return ONLY valid JSON in exactly this format:
     console.error(error);
     return res.status(500).json({
       success: false,
-      message: error.message || "Failed to finish mock interview.",
+      message: safeErrorMessage(error, "Failed to finish mock interview."),
     });
   }
 };
@@ -306,7 +318,7 @@ Return ONLY valid JSON in exactly this format:
 ========================================================= */
 const getInterviewHistory = async (req, res) => {
   try {
-    const filter = req.user ? { user: req.user._id } : {};
+    const filter = { user: req.user._id };
     const interviews = await Interview.find(filter).sort({ createdAt: -1 });
 
     return res.status(200).json({
@@ -326,7 +338,7 @@ const getInterviewById = async (req, res) => {
   try {
     const interview = await Interview.findById(req.params.id);
 
-    if (!interview) {
+    if (!interview || interview.user?.toString() !== req.user._id.toString()) {
       return res.status(404).json({
         success: false,
         message: "Interview not found.",
@@ -345,13 +357,16 @@ const getInterviewById = async (req, res) => {
 
 const deleteInterview = async (req, res) => {
   try {
-    const interview = await Interview.findByIdAndDelete(req.params.id);
-    if (!interview) {
+    const interview = await Interview.findById(req.params.id);
+
+    if (!interview || interview.user?.toString() !== req.user._id.toString()) {
       return res.status(404).json({
         success: false,
         message: "Interview not found.",
       });
     }
+
+    await Interview.findByIdAndDelete(req.params.id);
     return res.status(200).json({ success: true, message: "Deleted." });
   } catch (error) {
     return res.status(500).json({

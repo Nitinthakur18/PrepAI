@@ -2,7 +2,8 @@ const express = require("express");
 const router = express.Router();
 
 const upload = require("../middleware/upload");
-const { attachUserIfPresent } = require("../middleware/auth");
+const { validateFileSignature } = require("../middleware/upload");
+const { requireAuth } = require("../middleware/auth");
 
 const {
   uploadResume,
@@ -11,15 +12,18 @@ const {
   deleteResume,
 } = require("../controllers/resumeController");
 
+// All resume routes require a logged-in user: resumes are personal data,
+// and ownership is enforced against req.user in the controller.
 router.post(
   "/upload",
-  attachUserIfPresent,
+  requireAuth,
   upload.single("resume"),
+  validateFileSignature,
   uploadResume
 );
 
-router.get("/history", attachUserIfPresent, getResumeHistory);
-router.get("/:id", getResumeById);
-router.delete("/:id", deleteResume);
+router.get("/history", requireAuth, getResumeHistory);
+router.get("/:id", requireAuth, getResumeById);
+router.delete("/:id", requireAuth, deleteResume);
 
 module.exports = router;

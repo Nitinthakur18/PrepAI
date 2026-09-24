@@ -50,6 +50,7 @@ function Sidebar({ open, onClose }) {
           </div>
           <button
             onClick={onClose}
+            aria-label="Close navigation menu"
             className="lg:hidden text-slate-400 hover:text-white"
           >
             <FiX size={22} />

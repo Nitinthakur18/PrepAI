@@ -2,7 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { FiMenu, FiLogOut, FiUser } from "react-icons/fi";
 import { useAuth } from "../context/AuthContext";
 
-function Navbar({ onMenuClick }) {
+function Navbar({ onMenuClick, title }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -15,13 +15,19 @@ function Navbar({ onMenuClick }) {
     <header className="sticky top-0 z-30 flex items-center justify-between gap-4 px-4 sm:px-8 py-4 border-b border-white/5 bg-[#05070f]/80 backdrop-blur-xl">
       <button
         onClick={onMenuClick}
+        aria-label="Open navigation menu"
         className="lg:hidden text-slate-300 hover:text-white"
       >
         <FiMenu size={22} />
       </button>
 
-      <div className="hidden lg:block">
-        <p className="text-sm text-slate-400">
+      <div className="min-w-0">
+        {title && (
+          <h1 className="text-base sm:text-lg font-semibold text-white font-display truncate">
+            {title}
+          </h1>
+        )}
+        <p className="hidden lg:block text-sm text-slate-400">
           Welcome back{user?.name ? "," : ""}{" "}
           <span className="text-white font-semibold">{user?.name}</span> 👋
         </p>
@@ -40,6 +46,7 @@ function Navbar({ onMenuClick }) {
         <button
           onClick={handleLogout}
           title="Logout"
+          aria-label="Log out"
           className="p-2.5 rounded-full bg-red-500/10 hover:bg-red-500/20 text-red-300 transition"
         >
           <FiLogOut size={17} />

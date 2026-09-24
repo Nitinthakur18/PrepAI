@@ -2,6 +2,7 @@ const fs = require("fs");
 const Resume = require("../models/Resume");
 const { extractResumeText } = require("../services/resumeService");
 const { generateJSON } = require("../utils/gemini");
+const { safeErrorMessage } = require("../utils/safeError");
 
 /* ===========================
    Upload Resume + AI Analysis
@@ -73,7 +74,7 @@ ${resumeText}
     }
 
     const savedResume = await Resume.create({
-      user: req.user ? req.user._id : undefined,
+      user: req.user._id,
       filename: req.file.filename,
       originalName: req.file.originalname,
       resumeText,
@@ -91,7 +92,7 @@ ${resumeText}
 
     return res.status(500).json({
       success: false,
-      message: error.message || "Something went wrong while analyzing your resume.",
+      message: safeErrorMessage(error, "Something went wrong while analyzing your resume."),
     });
   }
 };
@@ -102,7 +103,7 @@ ${resumeText}
 
 const getResumeHistory = async (req, res) => {
   try {
-    const filter = req.user ? { user: req.user._id } : {};
+    const filter = { user: req.user._id };
 
     const resumes = await Resume.find(filter)
       .select("-resumeText")
@@ -130,7 +131,9 @@ const getResumeById = async (req, res) => {
   try {
     const resume = await Resume.findById(req.params.id);
 
-    if (!resume) {
+    // Return the same 404 whether the resume doesn't exist or belongs to
+    // someone else, so ownership can't be probed via response differences.
+    if (!resume || resume.user?.toString() !== req.user._id.toString()) {
       return res.status(404).json({
         success: false,
         message: "Resume not found.",
@@ -159,7 +162,7 @@ const deleteResume = async (req, res) => {
   try {
     const resume = await Resume.findById(req.params.id);
 
-    if (!resume) {
+    if (!resume || resume.user?.toString() !== req.user._id.toString()) {
       return res.status(404).json({
         success: false,
         message: "Resume not found.",

@@ -1,6 +1,7 @@
 const bcrypt = require("bcrypt");
 const User = require("../models/User");
 const { signToken } = require("../utils/token");
+const { safeErrorMessage } = require("../utils/safeError");
 
 const sanitizeUser = (user) => ({
   id: user._id,
@@ -58,7 +59,7 @@ const registerUser = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message,
+      message: safeErrorMessage(error, "Failed to create account. Please try again."),
     });
   }
 };
@@ -106,7 +107,7 @@ const loginUser = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message,
+      message: safeErrorMessage(error, "Login failed. Please try again."),
     });
   }
 };
@@ -138,7 +139,7 @@ const updateProfile = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message,
+      message: safeErrorMessage(error, "Failed to update profile. Please try again."),
     });
   }
 };

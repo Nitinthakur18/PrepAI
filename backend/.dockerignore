@@ -4,3 +4,5 @@ uploads/*
 !uploads/.gitkeep
 *.log
 .git
+tests
+coverage

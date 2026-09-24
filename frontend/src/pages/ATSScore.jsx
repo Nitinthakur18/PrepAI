@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { FiTarget } from "react-icons/fi";
+import toast from "react-hot-toast";
+import { FiTarget, FiZap, FiCopy } from "react-icons/fi";
 import ScoreGauge from "../components/ScoreGauge";
 import EmptyState from "../components/EmptyState";
 
@@ -81,6 +82,44 @@ function ATSScore() {
           </div>
         </div>
       </div>
+
+      {result.missingSkills?.length > 0 && (
+        <div className="card p-6 sm:p-8 bg-gradient-to-br from-cyan-600/15 via-indigo-600/5 to-transparent border-cyan-500/20">
+          <div className="flex items-center gap-2 mb-2 text-cyan-300">
+            <FiZap size={18} />
+            <h2 className="text-sm uppercase tracking-widest font-semibold">
+              Do this next
+            </h2>
+          </div>
+          <p className="text-white font-medium mb-4">
+            Add these {Math.min(5, result.missingSkills.length)} keyword
+            {Math.min(5, result.missingSkills.length) === 1 ? "" : "s"} to
+            your resume to improve your match:
+          </p>
+          <div className="flex flex-wrap gap-2.5 mb-5">
+            {result.missingSkills.slice(0, 5).map((skill, index) => (
+              <span
+                key={index}
+                className="bg-cyan-500/15 text-cyan-200 border border-cyan-500/30 px-3.5 py-1.5 rounded-full text-sm font-medium"
+              >
+                {skill}
+              </span>
+            ))}
+          </div>
+          <button
+            onClick={() => {
+              navigator.clipboard
+                ?.writeText(result.missingSkills.slice(0, 5).join(", "))
+                .then(() => toast.success("Keywords copied to clipboard."))
+                .catch(() => toast.error("Couldn't copy to clipboard."));
+            }}
+            className="inline-flex items-center gap-2 text-sm font-semibold text-cyan-300 hover:text-cyan-200 transition"
+          >
+            <FiCopy size={14} />
+            Copy keywords
+          </button>
+        </div>
+      )}
 
       <div className="grid md:grid-cols-3 gap-6">
         <div className="card p-6 text-center">

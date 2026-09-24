@@ -30,6 +30,8 @@ import { getDashboardStats } from "../services/analyticsService";
 import { useAuth } from "../context/AuthContext";
 import StatCard from "../components/StatCard";
 import EmptyState from "../components/EmptyState";
+import ErrorState from "../components/ErrorState";
+import { StatCardSkeleton, ChartCardSkeleton } from "../components/Skeleton";
 
 const quickLinks = [
   { to: "/upload", label: "Upload Resume", icon: FiUploadCloud, accent: "from-indigo-500 to-indigo-400" },
@@ -44,12 +46,19 @@ function Dashboard() {
   const { user } = useAuth();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
-  useEffect(() => {
+  const fetchStats = () => {
+    setLoading(true);
+    setError(false);
     getDashboardStats()
       .then((res) => setStats(res.data.data))
-      .catch(() => setStats(null))
+      .catch(() => setError(true))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchStats();
   }, []);
 
   const trendData = (stats?.scoreTrend || []).map((d, i) => ({
@@ -84,32 +93,41 @@ function Dashboard() {
         </p>
       </motion.div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          icon={FiFileText}
-          label="Resumes Analyzed"
-          value={stats?.totalResumes ?? "—"}
-          accent="indigo"
-        />
-        <StatCard
-          icon={FiTrendingUp}
-          label="Average ATS Score"
-          value={stats ? `${stats.averageAtsScore}%` : "—"}
-          accent="cyan"
-        />
-        <StatCard
-          icon={FiMic}
-          label="Mock Interviews"
-          value={stats?.totalInterviews ?? "—"}
-          accent="violet"
-        />
-        <StatCard
-          icon={FiTarget}
-          label="Avg Interview Score"
-          value={stats ? `${stats.averageInterviewScore}/10` : "—"}
-          accent="emerald"
-        />
-      </div>
+      {loading ? (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard
+            icon={FiFileText}
+            label="Resumes Analyzed"
+            value={stats?.totalResumes ?? "—"}
+            accent="indigo"
+          />
+          <StatCard
+            icon={FiTrendingUp}
+            label="Average ATS Score"
+            value={stats ? `${stats.averageAtsScore}%` : "—"}
+            accent="cyan"
+          />
+          <StatCard
+            icon={FiMic}
+            label="Mock Interviews"
+            value={stats?.totalInterviews ?? "—"}
+            accent="violet"
+          />
+          <StatCard
+            icon={FiTarget}
+            label="Avg Interview Score"
+            value={stats ? `${stats.averageInterviewScore}/10` : "—"}
+            accent="emerald"
+          />
+        </div>
+      )}
 
       <div>
         <h3 className="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wide">
@@ -141,7 +159,24 @@ function Dashboard() {
         </div>
       </div>
 
-      {!loading && stats && stats.totalResumes === 0 && stats.totalInterviews === 0 ? (
+      {loading ? (
+        <div className="grid lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2">
+            <ChartCardSkeleton />
+          </div>
+          <ChartCardSkeleton />
+          <div className="lg:col-span-2">
+            <ChartCardSkeleton height={220} />
+          </div>
+          <ChartCardSkeleton height={220} />
+        </div>
+      ) : error ? (
+        <ErrorState
+          title="Couldn't load your dashboard"
+          description="We ran into a problem fetching your stats. Check your connection and try again."
+          onRetry={fetchStats}
+        />
+      ) : stats && stats.totalResumes === 0 && stats.totalInterviews === 0 ? (
         <EmptyState
           icon={FiUploadCloud}
           title="No activity yet"

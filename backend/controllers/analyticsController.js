@@ -3,7 +3,7 @@ const Interview = require("../models/Interview");
 
 const getDashboardStats = async (req, res) => {
   try {
-    const filter = req.user ? { user: req.user._id } : {};
+    const filter = { user: req.user._id };
 
     const resumes = await Resume.find(filter).sort({ createdAt: 1 });
     const interviews = await Interview.find({

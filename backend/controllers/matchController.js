@@ -14,7 +14,7 @@ const matchResume = async (req, res) => {
 
     const resume = await Resume.findById(resumeId);
 
-    if (!resume) {
+    if (!resume || resume.user?.toString() !== req.user._id.toString()) {
       return res.status(404).json({
         success: false,
         message: "Resume not found.",

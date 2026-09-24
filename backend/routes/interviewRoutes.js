@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 
-const { attachUserIfPresent } = require("../middleware/auth");
+const { requireAuth } = require("../middleware/auth");
 const {
   generateQuestions,
   startMockInterview,
@@ -12,12 +12,15 @@ const {
   deleteInterview,
 } = require("../controllers/interviewController");
 
-router.post("/questions", attachUserIfPresent, generateQuestions);
-router.post("/mock/start", attachUserIfPresent, startMockInterview);
-router.post("/mock/answer", submitAnswer);
-router.post("/mock/finish", finishMockInterview);
-router.get("/history", attachUserIfPresent, getInterviewHistory);
-router.get("/:id", getInterviewById);
-router.delete("/:id", deleteInterview);
+// All interview routes require a logged-in user; ownership is enforced
+// against req.user in the controller for every read/write on a specific
+// interview (answer submission and finishing included).
+router.post("/questions", requireAuth, generateQuestions);
+router.post("/mock/start", requireAuth, startMockInterview);
+router.post("/mock/answer", requireAuth, submitAnswer);
+router.post("/mock/finish", requireAuth, finishMockInterview);
+router.get("/history", requireAuth, getInterviewHistory);
+router.get("/:id", requireAuth, getInterviewById);
+router.delete("/:id", requireAuth, deleteInterview);
 
 module.exports = router;
