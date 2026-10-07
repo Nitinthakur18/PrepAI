@@ -33,6 +33,12 @@ const resumeSchema = new mongoose.Schema(
       type: Object,
       default: null,
     },
+
+    // Recent job matches (newest first) so users can compare roles
+    matchHistory: {
+      type: [Object],
+      default: [],
+    },
   },
   {
     timestamps: true,

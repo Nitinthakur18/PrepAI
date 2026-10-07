@@ -1,253 +1,201 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
-import {
-  FiAward,
-  FiTrendingUp,
-  FiCheckCircle,
-  FiAlertTriangle,
-  FiArrowRight,
-} from "react-icons/fi";
+import { FiPlay, FiAlertTriangle, FiRefreshCw, FiCheck } from "react-icons/fi";
 import UploadCard from "../components/UploadCard";
+import { validateResumeFile } from "../utils/validateFile";
+import AnalysisReport from "../components/AnalysisReport";
 import Button from "../components/Button";
-import ScoreGauge from "../components/ScoreGauge";
-import { uploadResume } from "../services/resumeService";
+import { uploadResume, analyzeSampleResume, reanalyzeResume } from "../services/resumeService";
+import { getErrorMessage } from "../services/api";
+
+const STAGES = [
+  "Uploading your file",
+  "Reading text and layout",
+  "Detecting sections, skills and contact info",
+  "Scoring against ATS rules",
+  "Writing insights",
+];
+
+function Progress({ stage, pct }) {
+  return (
+    <div className="card max-w-xl mx-auto p-8" role="status" aria-live="polite">
+      <div className="h-2 rounded-full bg-white/5 overflow-hidden mb-6">
+        <div className="h-full bg-gradient-to-r from-indigo-400 to-cyan-400 transition-all duration-700" style={{ width: `${Math.min(100, ((stage + 1) / STAGES.length) * 100)}%` }} />
+      </div>
+      <ul className="space-y-3">
+        {STAGES.map((s, i) => (
+          <li key={s} className={`flex items-center gap-3 text-sm ${i <= stage ? "text-white" : "text-slate-600"}`}>
+            {i < stage ? (
+              <FiCheck className="text-emerald-400" />
+            ) : i === stage ? (
+              <span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-indigo-300 animate-spin" />
+            ) : (
+              <span className="h-4 w-4 rounded-full border border-white/10" />
+            )}
+            {s}
+            {i === 0 && pct != null && pct < 100 && <span className="text-xs text-slate-500">{pct}%</span>}
+          </li>
+        ))}
+      </ul>
+      <p className="text-xs text-slate-500 mt-6">
+        If Gemini is busy we automatically retry and fall back to PrepAI&apos;s built-in Smart Engine — your analysis will not fail.
+      </p>
+    </div>
+  );
+}
 
 function UploadResume() {
-  const navigate = useNavigate();
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [analysis, setAnalysis] = useState(null);
+  const [stage, setStage] = useState(0);
+  const [pct, setPct] = useState(null);
+  const [result, setResult] = useState(null);
+  const [notResume, setNotResume] = useState(null);
+  const [reanalyzing, setReanalyzing] = useState(false);
+  const timer = useRef(null);
 
-  const getProgressWidth = (score) => `${(score / 20) * 100}%`;
+  useEffect(() => () => clearInterval(timer.current), []);
 
-  const handleUpload = async () => {
-    if (!file) {
-      toast.error("Please select a resume first.");
+  const startStages = () => {
+    setStage(0);
+    clearInterval(timer.current);
+    timer.current = setInterval(() => setStage((s) => Math.min(s + 1, STAGES.length - 1)), 1600);
+  };
+
+  const finish = (data) => {
+    clearInterval(timer.current);
+    localStorage.setItem("prepai_resume_id", data.resumeId);
+    setResult({ ...data });
+    setLoading(false);
+    setPct(null);
+    if (data.meta?.source === "local") toast("Analysis ready — powered by the Smart Engine (Gemini is busy).", { icon: "⚙️" });
+    else toast.success("Resume analyzed!");
+  };
+
+  const fail = (err) => {
+    clearInterval(timer.current);
+    setLoading(false);
+    setPct(null);
+    const data = err.response?.data;
+    if (data?.code === "NOT_A_RESUME") {
+      setNotResume(data.message);
       return;
     }
+    toast.error(getErrorMessage(err, "Could not analyze that file."));
+  };
 
+  const run = async (f, force = false) => {
+    setResult(null);
+    setNotResume(null);
     setLoading(true);
-    setProgress(0);
-    setAnalysis(null);
-
+    setPct(0);
+    startStages();
     try {
-      const res = await uploadResume(file, setProgress);
-      localStorage.setItem("resumeId", res.data.resumeId);
-      setAnalysis(res.data.analysis);
-      toast.success("Analysis completed successfully!");
-    } catch (error) {
-      toast.error(
-        error.response?.data?.message || error.message || "Upload failed."
-      );
-    } finally {
-      setLoading(false);
+      const res = await uploadResume(f, (p) => setPct(p), { force });
+      finish(res.data);
+    } catch (err) {
+      fail(err);
     }
   };
 
+  const onFile = (f) => {
+    const problem = validateResumeFile(f);
+    if (problem) {
+      toast.error(problem);
+      return;
+    }
+    setFile(f);
+    run(f);
+  };
+
+  const runSample = async () => {
+    setFile(null);
+    setResult(null);
+    setNotResume(null);
+    setLoading(true);
+    setPct(null);
+    startStages();
+    try {
+      const res = await analyzeSampleResume();
+      finish(res.data);
+    } catch (err) {
+      fail(err);
+    }
+  };
+
+  const enhance = async () => {
+    if (!result?.resumeId) return;
+    setReanalyzing(true);
+    try {
+      const res = await reanalyzeResume(result.resumeId);
+      setResult((r) => ({ ...r, analysis: res.data.analysis, meta: res.data.meta?.source === "local" && !res.data.improved ? r.meta : res.data.meta }));
+      if (res.data.improved) toast.success(res.data.message);
+      else toast(res.data.message, { icon: "⏳" });
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setReanalyzing(false);
+    }
+  };
+
+  const reset = () => {
+    setResult(null);
+    setFile(null);
+    setNotResume(null);
+  };
+
   return (
-    <div className="space-y-10">
-      <div className="text-center max-w-2xl mx-auto">
-        <h1 className="text-3xl sm:text-4xl font-bold text-white font-display">
-          Analyze Your Resume
-        </h1>
-        <p className="text-slate-400 mt-3 text-base sm:text-lg">
-          Get an instant AI-powered ATS score, skill breakdown, and
-          personalized suggestions.
-        </p>
-      </div>
-
-      <UploadCard
-        file={file}
-        loading={loading}
-        onFileChange={(e) => setFile(e.target.files[0])}
-      />
-
-      <div className="flex flex-col items-center gap-3">
-        <Button
-          disabled={!file || loading}
-          onClick={handleUpload}
-          loading={loading}
-          className="px-10 py-4 text-base"
-        >
-          {loading ? "Analyzing Resume..." : "✨ Analyze Resume"}
-        </Button>
-        {loading && (
-          <div className="w-64 h-1.5 rounded-full bg-white/10 overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-indigo-500 to-cyan-400 transition-all"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-        )}
-      </div>
-
-      {analysis && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="space-y-6"
-        >
-          <div className="card p-8 sm:p-10 bg-gradient-to-br from-indigo-600/25 via-violet-600/10 to-transparent text-center">
-            <div className="flex items-center justify-center gap-2 text-indigo-300 mb-4">
-              <FiAward size={22} />
-              <span className="uppercase text-xs tracking-widest font-semibold">
-                ATS Score
-              </span>
-            </div>
-            <div className="flex justify-center">
-              <ScoreGauge score={analysis.atsScore} size={180} suffix="" label="/ 100" />
-            </div>
-            <p className="text-lg mt-4 font-semibold text-white">
-              {analysis.atsScore >= 90
-                ? "Outstanding 🚀"
-                : analysis.atsScore >= 80
-                ? "Excellent 🎯"
-                : analysis.atsScore >= 70
-                ? "Good 👍"
-                : "Needs Improvement ⚠️"}
+    <div className="space-y-8">
+      {!result && !loading && (
+        <>
+          <div className="text-center max-w-2xl mx-auto">
+            <h2 className="text-3xl sm:text-4xl font-bold font-display text-white">
+              Get your resume <span className="text-gradient">ATS-ready</span> in seconds
+            </h2>
+            <p className="text-slate-400 mt-3">
+              Section-by-section analysis, 18 ATS checks, skill extraction and role-fit — all explained, and always available.
             </p>
-            <Button
-              variant="outline"
-              className="mt-6"
-              icon={FiArrowRight}
-              onClick={() => navigate("/jobdescription")}
-            >
-              Match against a job description
-            </Button>
           </div>
-
-          <div className="card p-6 sm:p-8">
-            <div className="flex items-center gap-3 mb-6">
-              <FiTrendingUp size={20} className="text-indigo-300" />
-              <h2 className="text-xl font-bold text-white font-display">
-                Score Breakdown
-              </h2>
-            </div>
-            {Object.entries(analysis.scoreBreakdown || {}).map(
-              ([key, value]) => (
-                <div key={key} className="mb-5 last:mb-0">
-                  <div className="flex justify-between mb-2 text-sm">
-                    <span className="capitalize font-semibold text-slate-200">
-                      {key}
-                    </span>
-                    <span className="text-slate-400">{value}/20</span>
-                  </div>
-                  <div className="w-full h-2.5 rounded-full bg-white/10">
-                    <div
-                      className="h-2.5 rounded-full bg-gradient-to-r from-indigo-500 to-cyan-400 transition-all duration-1000"
-                      style={{ width: getProgressWidth(value) }}
-                    />
-                  </div>
-                </div>
-              )
-            )}
+          <UploadCard file={file} loading={loading} onFile={onFile} />
+          <div className="text-center">
+            <p className="text-sm text-slate-500 mb-3">No resume handy?</p>
+            <Button variant="ghost" icon={FiPlay} onClick={runSample}>Try with a demo resume</Button>
           </div>
+        </>
+      )}
 
-          <div className="grid lg:grid-cols-2 gap-6">
-            <div className="card p-6 sm:p-8">
-              <h2 className="text-lg font-bold mb-4 text-white font-display">
-                📄 Professional Summary
-              </h2>
-              <p className="text-slate-300 leading-7 text-sm">
-                {analysis.summary}
-              </p>
-            </div>
-
-            <div className="card p-6 sm:p-8">
-              <h2 className="text-lg font-bold mb-4 text-white font-display">
-                📈 Experience Level
-              </h2>
-              <span className="inline-block bg-amber-500/15 text-amber-300 border border-amber-500/30 px-4 py-2 rounded-full font-semibold text-sm">
-                {analysis.experienceLevel}
-              </span>
-            </div>
-          </div>
-
-          <div className="card p-6 sm:p-8">
-            <h2 className="text-lg font-bold mb-5 text-white font-display">
-              💻 Technical Skills
-            </h2>
-            <div className="flex flex-wrap gap-2.5">
-              {analysis.technicalSkills?.map((skill, index) => (
-                <span
-                  key={index}
-                  className="px-3.5 py-1.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 text-sm font-medium"
-                >
-                  {skill}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div className="card p-6 sm:p-8">
-            <h2 className="text-lg font-bold mb-5 text-white font-display">
-              🤝 Soft Skills
-            </h2>
-            <div className="flex flex-wrap gap-2.5">
-              {analysis.softSkills?.map((skill, index) => (
-                <span
-                  key={index}
-                  className="px-3.5 py-1.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 text-sm font-medium"
-                >
-                  {skill}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid lg:grid-cols-2 gap-6">
-            <div className="card p-6 sm:p-8">
-              <div className="flex items-center gap-3 mb-5">
-                <FiCheckCircle className="text-emerald-400" size={22} />
-                <h2 className="text-lg font-bold text-white font-display">
-                  Strengths
-                </h2>
+      {notResume && (
+        <div className="card max-w-xl mx-auto p-6 border-amber-400/30">
+          <div className="flex gap-3">
+            <FiAlertTriangle className="text-amber-300 shrink-0 mt-0.5" size={22} />
+            <div>
+              <h3 className="font-semibold text-white">This doesn&apos;t look like a resume</h3>
+              <p className="text-sm text-slate-400 mt-1">{notResume}</p>
+              <div className="flex gap-3 mt-4">
+                <Button variant="ghost" onClick={reset}>Choose another file</Button>
+                <Button variant="outline" onClick={() => file && run(file, true)}>Analyze anyway</Button>
               </div>
-              <ul className="space-y-3">
-                {analysis.strengths?.map((item, index) => (
-                  <li key={index} className="flex gap-3 text-sm text-slate-300">
-                    <span className="text-emerald-400">✔</span>
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="card p-6 sm:p-8">
-              <div className="flex items-center gap-3 mb-5">
-                <FiAlertTriangle className="text-amber-400" size={22} />
-                <h2 className="text-lg font-bold text-white font-display">
-                  Weaknesses
-                </h2>
-              </div>
-              <ul className="space-y-3">
-                {analysis.weaknesses?.map((item, index) => (
-                  <li key={index} className="flex gap-3 text-sm text-slate-300">
-                    <span className="text-amber-400">⚠</span>
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
             </div>
           </div>
+        </div>
+      )}
 
-          <div className="card p-6 sm:p-8">
-            <h2 className="text-lg font-bold mb-5 text-white font-display">
-              💡 Resume Improvement Suggestions
-            </h2>
-            <ol className="space-y-3 list-decimal list-inside text-slate-300 text-sm">
-              {analysis.suggestions?.map((item, index) => (
-                <li key={index} className="leading-6">
-                  {item}
-                </li>
-              ))}
-            </ol>
+      {loading && <Progress stage={stage} pct={pct} />}
+
+      {result && (
+        <>
+          <div className="flex justify-end no-print">
+            <Button variant="ghost" icon={FiRefreshCw} onClick={reset}>Analyze another resume</Button>
           </div>
-        </motion.div>
+          <AnalysisReport
+            analysis={result.analysis}
+            meta={result.meta}
+            resumeId={result.resumeId}
+            name={result.originalName || file?.name}
+            onReanalyze={enhance}
+            reanalyzing={reanalyzing}
+          />
+        </>
       )}
     </div>
   );

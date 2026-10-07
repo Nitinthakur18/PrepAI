@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import toast from "react-hot-toast";
 import {
@@ -9,10 +10,14 @@ import {
   FiChevronUp,
   FiClock,
   FiSearch,
+  FiExternalLink,
+  FiGitMerge,
 } from "react-icons/fi";
 import EmptyState from "../components/EmptyState";
 import ErrorState from "../components/ErrorState";
 import ConfirmDialog from "../components/ConfirmDialog";
+import SourceBadge from "../components/SourceBadge";
+import Button from "../components/Button";
 import { getResumeHistory, deleteResume } from "../services/resumeService";
 import {
   getInterviewHistory,
@@ -36,6 +41,8 @@ function History() {
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("date-desc");
   const [pendingDelete, setPendingDelete] = useState(null); // { type, id, label }
+  const [compareIds, setCompareIds] = useState([]);
+  const navigate = useNavigate();
 
   const fetchAll = async () => {
     setLoading(true);
@@ -81,21 +88,11 @@ function History() {
     return sorted;
   };
 
-  const filteredResumes = useMemo(
-    () =>
-      sortAndFilter(resumes, "resume", (r) => r.originalName || r.filename || ""),
-    [resumes, search, sortBy]
-  );
+  const filteredResumes = sortAndFilter(resumes, "resume", (r) => r.originalName || r.filename || "");
+  const filteredInterviews = sortAndFilter(interviews, "interview", (i) => `${i.role || ""} ${i.mode || ""}`);
 
-  const filteredInterviews = useMemo(
-    () =>
-      sortAndFilter(
-        interviews,
-        "interview",
-        (i) => `${i.role || ""} ${i.mode || ""}`
-      ),
-    [interviews, search, sortBy]
-  );
+  const toggleCompare = (id) =>
+    setCompareIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : cur.length >= 2 ? [cur[1], id] : [...cur, id]));
 
   const requestDeleteResume = (id, label) =>
     setPendingDelete({ type: "resume", id, label });
@@ -232,6 +229,22 @@ function History() {
           />
         ) : (
           <div className="space-y-4">
+            {resumes.length > 1 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                <p className="text-sm text-slate-400">
+                  Tick two resumes to see what improved between versions.
+                </p>
+                <Button
+                  variant="ghost"
+                  icon={FiGitMerge}
+                  className="!py-2"
+                  disabled={compareIds.length !== 2}
+                  onClick={() => navigate(`/compare?a=${compareIds[0]}&b=${compareIds[1]}`)}
+                >
+                  Compare ({compareIds.length}/2)
+                </Button>
+              </div>
+            )}
             {filteredResumes.map((resume, i) => (
               <motion.div
                 key={resume._id}
@@ -242,12 +255,22 @@ function History() {
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-start gap-3">
+                    {resumes.length > 1 && (
+                      <input
+                        type="checkbox"
+                        checked={compareIds.includes(resume._id)}
+                        onChange={() => toggleCompare(resume._id)}
+                        aria-label={`Select ${resume.originalName || resume.filename} for comparison`}
+                        className="mt-3 accent-indigo-500"
+                      />
+                    )}
                     <div className="h-10 w-10 rounded-xl bg-indigo-500/15 flex items-center justify-center shrink-0">
                       <FiFileText className="text-indigo-300" size={18} />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-white">
+                      <h3 className="font-semibold text-white flex flex-wrap items-center gap-2">
                         {resume.originalName || resume.filename}
+                        <SourceBadge meta={resume.analysis?.meta} />
                       </h3>
                       <p className="text-xs text-slate-500 mt-1 flex items-center gap-1.5">
                         <FiClock size={12} />
@@ -296,6 +319,12 @@ function History() {
                     <p className="text-sm text-slate-300">
                       {resume.analysis?.summary}
                     </p>
+                    <Link
+                      to={`/resume/${resume._id}`}
+                      className="inline-flex items-center gap-2 text-sm text-indigo-300 hover:text-indigo-200"
+                    >
+                      <FiExternalLink size={14} /> Open full report
+                    </Link>
                     <div className="flex flex-wrap gap-2">
                       {(resume.analysis?.technicalSkills || []).map((s, idx) => (
                         <span
@@ -412,7 +441,7 @@ function History() {
                           <span>
                             {idx + 1}. {q.question}
                           </span>
-                          {q.score !== null && (
+                          {typeof q.score === "number" && (
                             <span className="text-slate-300 font-medium shrink-0">
                               {q.score}/10
                             </span>

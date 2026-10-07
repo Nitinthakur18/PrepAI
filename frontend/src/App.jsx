@@ -20,6 +20,11 @@ const ATSScore = lazy(() => import("./pages/ATSScore"));
 const History = lazy(() => import("./pages/History"));
 const Settings = lazy(() => import("./pages/Settings"));
 const NotFound = lazy(() => import("./pages/NotFound"));
+const Landing = lazy(() => import("./pages/Landing"));
+const ResumeReport = lazy(() => import("./pages/ResumeReport"));
+const CareerTools = lazy(() => import("./pages/CareerTools"));
+const Tracker = lazy(() => import("./pages/Tracker"));
+const Compare = lazy(() => import("./pages/Compare"));
 
 function RouteFallback() {
   return (
@@ -34,7 +39,8 @@ function RootRedirect() {
   const hasToken = !!localStorage.getItem("prepai_token");
 
   if (initializing) return null;
-  return <Navigate to={user || hasToken ? "/dashboard" : "/login"} replace />;
+  // Signed-in users go straight to the app; visitors see the landing page.
+  return user || hasToken ? <Navigate to="/dashboard" replace /> : <Landing />;
 }
 
 function App() {
@@ -55,6 +61,10 @@ function App() {
             <Route path="/mock-interview" element={<MockInterview />} />
             <Route path="/resume-builder" element={<ResumeBuilder />} />
             <Route path="/history" element={<History />} />
+            <Route path="/resume/:id" element={<ResumeReport />} />
+            <Route path="/compare" element={<Compare />} />
+            <Route path="/career-tools" element={<CareerTools />} />
+            <Route path="/tracker" element={<Tracker />} />
             <Route path="/settings" element={<Settings />} />
           </Route>
         </Route>

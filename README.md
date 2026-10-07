@@ -7,28 +7,78 @@ one place.
 
 ## ✨ Features
 
-- **Resume Upload + AI Analysis** — PDF/DOCX parsing, Gemini-powered ATS
-  scoring, skill extraction, strengths/weaknesses, and suggestions.
-- **Job Description Matching** — keyword/skill coverage score against a
-  pasted job description, with matched/missing skills.
-- **AI Interview Question Generator** — generates a tailored question bank
-  (technical, behavioral, situational) for any target role.
-- **AI Mock Interview** — a live, one-question-at-a-time simulated interview
-  where Gemini scores every answer and produces a final performance report.
-- **Dashboard Analytics** — ATS score trend, skill-category radar,
-  most-common missing skills, and a recent activity feed.
-- **Resume Builder** — build a resume with a live preview and export it to
-  PDF client-side.
-- **History** — every resume analysis and interview session is saved and
-  browsable, with delete support.
-- **Authentication** — JWT-based register/login, so your history is tied to
-  your account.
+**Analysis**
+- **Resume analysis** — PDF/DOCX parsing, an explainable 100-point ATS score
+  (5 categories), **18 ATS checks** (contact info, sections, length, bullets,
+  quantified results, action verbs, weak phrases, buzzwords, symbols…),
+  skill extraction grouped by area (350+ skills with aliases), role-fit
+  across 15 career paths, strengths/weaknesses and prioritised suggestions.
+- **"Is this a resume?" detection** — question papers, invoices and other
+  documents are rejected *before* scoring or spending AI quota.
+- **Job match engine** — required vs. preferred skills, keyword extraction
+  beyond the skills list, experience-years and education requirement checks,
+  title alignment, semantic similarity, tailored bullets and a **learning
+  roadmap** (effort estimates + official docs) for every gap.
+- **Resume compare** — see what improved between two versions.
+- **PDF reports** — download the analysis or job-match report.
+
+**Practice**
+- **Question bank** — role-specific, personalised to your resume and the job.
+- **Voice mock interview** — timed answers, speak or type (Web Speech API),
+  question read-aloud, rubric scoring (relevance, structure, specificity,
+  depth, clarity), model answers, resumable sessions and a full report.
+
+**Apply**
+- **Career toolkit** — cover letter (3 tones), bullet improver, LinkedIn
+  headline/About, 60-second interview pitch.
+- **Job tracker** — drag-and-drop Kanban with match scores, next-step dates
+  and response-rate stats.
+
+**Platform**
+- **Dashboard** — career-readiness score, streak, next-best-actions, ATS
+  trend, interview category strengths, skill gaps, activity feed.
+- **Account tools** — change password, export all data, delete account.
+- **Landing page**, resume builder, history with search/sort.
+
+## 🛡️ Reliability: the AI can fail, the app can't
+
+Gemini returns 503/429 under load. PrepAI is built so that never reaches the
+user. Every AI feature follows the same contract (`backend/services/aiService.js`):
+
+```
+request ─► Smart Engine computes the deterministic result (instant, free)
+        ─► Gemini enriches it through the resilient gateway
+              • model fallback chain      (GEMINI_MODELS)
+              • API-key rotation          (GEMINI_API_KEYS)
+              • retries + jittered exponential backoff, server retry hints
+              • per-attempt timeout + total time budget
+              • per-model / per-key cooldowns after 429 / auth / 404
+              • circuit breaker  → during an outage requests answer instantly
+              • concurrency limiter, LRU+TTL cache, in-flight de-duplication
+              • tolerant JSON repair, auto-retry on malformed output
+        ─► anything wrong? use the Smart Engine result, flag it in the UI
+```
+
+- The **Smart Engine** (`backend/services/engine/`) is a complete offline
+  implementation of every feature: resume parser, scorer, JD matcher,
+  interview bank, answer grader, cover letters, roadmap. No API key needed.
+- Scores are **rule-based and reproducible**; Gemini adds content-quality
+  review (blended 65/35) and qualitative insights.
+- The UI always shows where a result came from (Gemini or Smart Engine) and
+  offers **"Enhance with AI"** to upgrade a result once Gemini is back.
+- A live **AI status badge** and a **Test AI connection** button show the
+  health of each model, cooldowns and the circuit breaker.
+- Other safety nets: MongoDB reconnects with backoff instead of crashing
+  (API answers 503 meanwhile), uploaded files are deleted after text
+  extraction, prompt-injection text in resumes is treated as data, and a React
+  error boundary prevents white screens.
 
 ## 🧱 Stack
 
 - **Frontend:** React 19, Vite, Tailwind CSS v4, Framer Motion, Recharts,
   React Router, Axios, react-hot-toast, jsPDF + html2canvas.
-- **Backend:** Node.js, Express 5, Mongoose (MongoDB Atlas), JWT auth,
+- **Backend:** Node.js, Express 5, Mongoose (MongoDB Atlas), JWT auth, a custom
+  resilient Gemini gateway + offline Smart Engine,
   Multer (uploads), pdf-parse + mammoth (PDF/DOCX text extraction),
   Google Gemini (`@google/genai`).
 
@@ -36,7 +86,9 @@ one place.
 
 ```
 PrepAI/
-├── backend/          Express API (auth, resumes, matching, interviews, analytics)
+├── backend/          Express API
+│   ├── utils/gemini.js          resilient Gemini gateway (retries, fallback, circuit breaker)
+│   └── services/engine/         offline Smart Engine (parser, scorer, matcher, interviews…)
 ├── frontend/          React + Vite SPA
 └── docker-compose.yml Local full-stack orchestration
 ```
@@ -58,9 +110,12 @@ Required environment variables (see `backend/.env.example`):
 |---|---|
 | `MONGODB_URI` | MongoDB Atlas connection string |
 | `JWT_SECRET` | Long random string used to sign auth tokens |
-| `GEMINI_API_KEY` | Google Gemini API key (https://aistudio.google.com/apikey) |
+| `GEMINI_API_KEY` | Google Gemini API key (https://aistudio.google.com/apikey). **Optional** — without it the app runs on the Smart Engine |
 | `PORT` | Defaults to 3000 |
 | `CLIENT_ORIGIN` | Comma-separated allowed frontend origin(s) for CORS in production |
+
+Optional resilience settings (`GEMINI_API_KEYS`, `GEMINI_MODELS`, `AI_TIMEOUT_MS`,
+`AI_DISABLED`, …) are documented in `backend/.env.example`.
 
 > ⚠️ **Rotate your credentials.** If you previously committed a `.env` file
 > with real values to git or shared it anywhere, treat that Mongo password
@@ -135,20 +190,34 @@ Set `CLIENT_ORIGIN` on the backend to your deployed frontend URL(s)
 
 | Method | Route | Description |
 |---|---|---|
-| POST | `/api/auth/register` | Create an account |
-| POST | `/api/auth/login` | Log in, returns a JWT |
-| GET | `/api/auth/me` | Current user (auth required) |
-| PUT | `/api/auth/me` | Update profile |
-| POST | `/api/resume/upload` | Upload + AI-analyze a resume |
-| GET | `/api/resume/history` | List past resume analyses |
-| GET/DELETE | `/api/resume/:id` | Fetch / delete a resume |
+| GET | `/api/health` · `/api/health/ai` | Server/DB status · Gemini + Smart Engine status (public) |
+| POST | `/api/ai/test` | Live Gemini probe (auth) |
+| POST | `/api/auth/register` · `/login` | Create account · log in (JWT) |
+| GET/PUT/DELETE | `/api/auth/me` | Profile · update · delete account + data |
+| PUT | `/api/auth/password` | Change password |
+| POST | `/api/resume/upload` | Upload + analyze (`force=true` to analyze a non-resume) |
+| POST | `/api/resume/sample` | Analyze the built-in demo resume |
+| POST | `/api/resume/:id/reanalyze` | Retry the AI pass for an existing resume |
+| GET | `/api/resume/history` · `/compare?a=&b=` · `/:id` | List · compare two · fetch one |
+| DELETE | `/api/resume/:id` | Delete a resume |
 | POST | `/api/resume/match` | Match a resume against a job description |
-| POST | `/api/interview/questions` | Generate an interview question bank |
-| POST | `/api/interview/mock/start` | Start a mock interview session |
-| POST | `/api/interview/mock/answer` | Submit + AI-score one answer |
-| POST | `/api/interview/mock/finish` | Finish and get the final report |
-| GET | `/api/interview/history` | List past interview sessions |
-| GET | `/api/analytics/dashboard` | Dashboard stats/analytics |
+| POST | `/api/interview/questions` | Generate a question bank |
+| POST | `/api/interview/mock/start` · `/answer` · `/finish` | Mock interview flow |
+| GET/DELETE | `/api/interview/history` · `/:id` | Interview sessions |
+| POST | `/api/tools/cover-letter` · `/bullets` · `/linkedin` · `/pitch` · `/roadmap` | Career toolkit |
+| GET/POST/PUT/DELETE | `/api/tracker` · `/api/tracker/stats` | Job application tracker |
+| GET | `/api/analytics/dashboard` | Dashboard analytics |
+
+## 🧪 Tests
+
+```bash
+cd backend && npm test      # 110 tests: gateway resilience, engine, API, security
+cd frontend && npm run lint
+```
+
+The suite simulates Gemini 503s, 429s, timeouts, malformed output and a total
+outage, and verifies every endpoint still succeeds. It also covers upload
+(real PDF extraction), ownership/IDOR protection and the engine's scoring.
 
 ## 📄 License
 

@@ -4,7 +4,17 @@ const mongoose = require("mongoose");
 const connectDB = require("./config/db");
 const app = require("./app");
 
-connectDB();
+// Never let a stray rejected promise (e.g. a failed AI call) take the server down.
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled promise rejection:", reason && reason.stack ? reason.stack : reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught exception:", err && err.stack ? err.stack : err);
+});
+
+// Reject API calls with a clear 503 while MongoDB is unreachable (see app.js).
+app.locals.requireDb = true;
+connectDB(); // retries with backoff; does not exit the process
 
 const PORT = process.env.PORT || 3000;
 

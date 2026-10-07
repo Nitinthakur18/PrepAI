@@ -21,8 +21,8 @@ function Register() {
       toast.error("Please fill in all fields.");
       return;
     }
-    if (form.password.length < 6) {
-      toast.error("Password must be at least 6 characters.");
+    if (form.password.length < 8 || !/[A-Za-z]/.test(form.password) || !/\d/.test(form.password)) {
+      toast.error("Password needs 8+ characters with a letter and a number.");
       return;
     }
     try {
@@ -105,7 +105,7 @@ function Register() {
               name="password"
               value={form.password}
               onChange={handleChange}
-              placeholder="Password (min 6 characters)"
+              placeholder="Password (8+ chars, letter & number)"
               className="w-full bg-white/5 border border-white/10 rounded-xl pl-11 pr-4 py-3.5 text-sm text-white placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-500/50 transition"
             />
           </div>

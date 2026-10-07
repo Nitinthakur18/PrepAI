@@ -1,181 +1,144 @@
-import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import { FiMessageSquare, FiArrowRight, FiMic } from "react-icons/fi";
-import { Link } from "react-router-dom";
+import { FiMic, FiChevronDown, FiPlay, FiDownload, FiCopy } from "react-icons/fi";
 import Button from "../components/Button";
-import EmptyState from "../components/EmptyState";
+import ResumeSelect from "../components/ResumeSelect";
+import SourceBadge from "../components/SourceBadge";
+import { Chip, Panel } from "../components/ui";
+import useResumes from "../hooks/useResumes";
 import { generateQuestions } from "../services/interviewService";
+import { getErrorMessage } from "../services/api";
+import { downloadTextFile } from "../utils/pdfReport";
 
-const difficultyColor = {
-  Easy: "bg-emerald-500/15 text-emerald-300 border-emerald-500/25",
-  Medium: "bg-amber-500/15 text-amber-300 border-amber-500/25",
-  Hard: "bg-red-500/15 text-red-300 border-red-500/25",
-};
+const DIFF_TONE = { Easy: "emerald", Medium: "amber", Hard: "red" };
+const CAT_TONE = { Technical: "indigo", Behavioral: "violet", Situational: "cyan", "Role-specific": "amber" };
+const inputCls =
+  "w-full rounded-xl bg-[#0b0f1d] border border-white/10 px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-400/60";
 
 function Interview() {
-  const [role, setRole] = useState("");
-  const [jobDescription, setJobDescription] = useState("");
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { resumes, loading, selectedId, setSelectedId } = useResumes();
+  const [role, setRole] = useState(location.state?.role || "");
+  const [jd, setJd] = useState(location.state?.jobDescription || "");
   const [count, setCount] = useState(10);
-  const [loading, setLoading] = useState(false);
-  const [questions, setQuestions] = useState(null);
+  const [useResume, setUseResume] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [data, setData] = useState(null);
+  const [filter, setFilter] = useState("All");
+  const [open, setOpen] = useState({});
 
-  const handleGenerate = async () => {
-    if (!role.trim()) {
-      toast.error("Please enter a target job role.");
-      return;
-    }
+  const categories = useMemo(() => ["All", ...new Set((data?.questions || []).map((q) => q.category))], [data]);
+  const shown = (data?.questions || []).filter((q) => filter === "All" || q.category === filter);
 
+  const generate = async () => {
+    if (!role.trim()) return toast.error("Enter the role you're preparing for.");
+    setBusy(true);
     try {
-      setLoading(true);
-      const resumeId = localStorage.getItem("resumeId") || undefined;
       const res = await generateQuestions({
-        role,
-        jobDescription,
-        resumeId,
+        role: role.trim(),
+        jobDescription: jd.trim(),
         count,
+        resumeId: useResume && selectedId ? selectedId : undefined,
       });
-      setQuestions(res.data.questions);
-      toast.success("Interview questions generated!");
+      setData(res.data);
+      setFilter("All");
+      setOpen({});
     } catch (err) {
-      toast.error(
-        err.response?.data?.message || "Failed to generate questions."
-      );
+      toast.error(getErrorMessage(err, "Could not generate questions."));
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
   };
 
+  const asText = () =>
+    (data?.questions || [])
+      .map((q, i) => `${i + 1}. [${q.category} · ${q.difficulty}] ${q.question}${q.idealAnswerTips ? `\n   Tip: ${q.idealAnswerTips}` : ""}`)
+      .join("\n\n");
+
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
-      <div className="text-center">
-        <div className="inline-flex items-center gap-2 text-indigo-300 mb-3">
-          <FiMessageSquare size={20} />
-          <span className="uppercase text-xs tracking-widest font-semibold">
-            AI Interview Question Generator
-          </span>
-        </div>
-        <h1 className="text-3xl sm:text-4xl font-bold text-white font-display">
-          Build a Custom Question Bank
-        </h1>
-        <p className="text-slate-400 mt-3">
-          Tell us the role you're preparing for and we'll generate targeted
-          technical, behavioral, and situational questions — personalized
-          using your uploaded resume if available.
-        </p>
+    <div className="max-w-5xl mx-auto space-y-6">
+      <div>
+        <h2 className="text-2xl sm:text-3xl font-bold text-white font-display">
+          Interview <span className="text-gradient">question bank</span>
+        </h2>
+        <p className="text-slate-400 mt-2">Role-specific questions personalised to your resume and the job — with tips on what a strong answer covers.</p>
       </div>
 
-      <div className="card p-6 sm:p-8 space-y-5">
-        <div>
-          <label className="text-sm text-slate-300 font-medium mb-2 block">
-            Target Job Role
-          </label>
-          <input
-            type="text"
-            value={role}
-            onChange={(e) => setRole(e.target.value)}
-            placeholder="e.g. Frontend Developer, Data Analyst, Product Manager"
-            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-sm text-white placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-500/50 transition"
-          />
+      <Panel title="Set up" icon={FiMic}>
+        <div className="grid md:grid-cols-[1fr,auto] gap-3">
+          <input className={inputCls} placeholder="Target role, e.g. Full Stack Developer" value={role} maxLength={120} onChange={(e) => setRole(e.target.value)} aria-label="Target role" />
+          <select value={count} onChange={(e) => setCount(Number(e.target.value))} className={`${inputCls} md:w-44`} aria-label="Number of questions">
+            {[5, 8, 10, 15, 20].map((n) => <option key={n} value={n}>{n} questions</option>)}
+          </select>
         </div>
-
-        <div>
-          <label className="text-sm text-slate-300 font-medium mb-2 block">
-            Job Description <span className="text-slate-500">(optional)</span>
-          </label>
-          <textarea
-            rows={6}
-            value={jobDescription}
-            onChange={(e) => setJobDescription(e.target.value)}
-            placeholder="Paste a job description to tailor the questions further..."
-            className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-sm text-white placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-500/50 transition resize-none"
-          />
-        </div>
-
-        <div className="flex items-center gap-4">
-          <label className="text-sm text-slate-300 font-medium">
-            Number of questions
-          </label>
-          <input
-            type="number"
-            min={5}
-            max={20}
-            value={count}
-            onChange={(e) => setCount(Number(e.target.value))}
-            className="w-20 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500/60"
-          />
-        </div>
-
-        <div className="flex flex-col sm:flex-row gap-3">
-          <Button
-            onClick={handleGenerate}
-            loading={loading}
-            icon={FiArrowRight}
-          >
-            {loading ? "Generating..." : "Generate Questions"}
-          </Button>
-          <Link to="/mock-interview">
-            <Button variant="outline" icon={FiMic} className="w-full">
-              Try a Live Mock Interview instead
-            </Button>
-          </Link>
-        </div>
-      </div>
-
-      <AnimatePresence>
-        {questions && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className="space-y-4"
-          >
-            {questions.map((q, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, x: -12 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.04 }}
-                className="card p-5 sm:p-6"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <p className="text-white font-medium leading-relaxed">
-                    <span className="text-indigo-400 font-semibold mr-2">
-                      Q{i + 1}.
-                    </span>
-                    {q.question}
-                  </p>
-                  <span
-                    className={`shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full border ${
-                      difficultyColor[q.difficulty] ||
-                      "bg-white/5 text-slate-300 border-white/10"
-                    }`}
-                  >
-                    {q.difficulty}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 mt-3">
-                  <span className="text-xs bg-white/5 text-slate-400 px-2.5 py-1 rounded-full border border-white/10">
-                    {q.category}
-                  </span>
-                </div>
-                {q.idealAnswerTips && (
-                  <p className="text-sm text-slate-400 mt-3 border-t border-white/5 pt-3">
-                    💡 {q.idealAnswerTips}
-                  </p>
-                )}
-              </motion.div>
-            ))}
-          </motion.div>
+        <textarea className={`${inputCls} mt-3 resize-y`} rows={4} placeholder="Paste the job description (optional — makes questions much more relevant)" value={jd} maxLength={8000} onChange={(e) => setJd(e.target.value)} aria-label="Job description" />
+        {resumes.length > 0 && (
+          <div className="mt-4 grid md:grid-cols-[auto,1fr] gap-4 items-end">
+            <label className="flex items-center gap-2 text-sm text-slate-300 pb-3">
+              <input type="checkbox" checked={useResume} onChange={(e) => setUseResume(e.target.checked)} className="accent-indigo-500" />
+              Personalise with my resume
+            </label>
+            {useResume && <ResumeSelect resumes={resumes} loading={loading} selectedId={selectedId} onChange={setSelectedId} label="" />}
+          </div>
         )}
-      </AnimatePresence>
+        <div className="flex flex-wrap gap-3 justify-end mt-5">
+          <Button onClick={generate} loading={busy} icon={FiPlay}>Generate questions</Button>
+        </div>
+      </Panel>
 
-      {!questions && !loading && (
-        <EmptyState
-          icon={FiMessageSquare}
-          title="Your questions will appear here"
-          description="Enter a role above and generate a personalized interview question bank in seconds."
-        />
+      {busy && (
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-20 rounded-2xl bg-white/5 animate-pulse" />)}
+        </div>
+      )}
+
+      {data && !busy && (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap gap-2 items-center">
+              {categories.map((c) => (
+                <button key={c} onClick={() => setFilter(c)} className={`px-3 py-1.5 rounded-lg text-xs border transition ${filter === c ? "bg-indigo-500/20 border-indigo-400/40 text-white" : "bg-white/5 border-white/10 text-slate-400 hover:text-white"}`}>
+                  {c}
+                </button>
+              ))}
+              <SourceBadge meta={data.meta} />
+            </div>
+            <div className="flex gap-2">
+              <Button variant="ghost" icon={FiCopy} className="!py-2" onClick={() => navigator.clipboard.writeText(asText()).then(() => toast.success("Copied all questions"))}>Copy all</Button>
+              <Button variant="ghost" icon={FiDownload} className="!py-2" onClick={() => downloadTextFile(asText(), `interview-questions-${role.replace(/\s+/g, "-")}.txt`)}>Download</Button>
+              <Button icon={FiMic} className="!py-2" onClick={() => navigate("/mock-interview", { state: { role, jobDescription: jd, count: Math.min(8, count), autostart: false } })}>Mock interview</Button>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {shown.map((q, i) => {
+              const key = `${q.category}-${i}-${q.question.slice(0, 20)}`;
+              const isOpen = !!open[key];
+              return (
+                <div key={key} className="card p-5">
+                  <button className="w-full flex items-start justify-between gap-4 text-left" onClick={() => setOpen((o) => ({ ...o, [key]: !o[key] }))} aria-expanded={isOpen}>
+                    <div>
+                      <div className="flex gap-2 mb-2">
+                        <Chip tone={CAT_TONE[q.category] || "slate"}>{q.category}</Chip>
+                        <Chip tone={DIFF_TONE[q.difficulty] || "slate"}>{q.difficulty}</Chip>
+                      </div>
+                      <p className="text-white font-medium leading-relaxed">{q.question}</p>
+                    </div>
+                    <FiChevronDown className={`shrink-0 mt-1 text-slate-400 transition ${isOpen ? "rotate-180" : ""}`} />
+                  </button>
+                  {isOpen && (
+                    <div className="mt-4 pt-4 border-t border-white/5 text-sm text-slate-300 leading-relaxed">
+                      <p className="text-xs text-slate-500 mb-1">What a strong answer covers</p>
+                      {q.idealAnswerTips || "Answer directly, give a concrete example from your experience, and finish with the result."}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
     </div>
   );

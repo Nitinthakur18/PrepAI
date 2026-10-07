@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { FiMenu, FiLogOut, FiUser } from "react-icons/fi";
 import { useAuth } from "../context/AuthContext";
+import AIStatusBadge from "./AIStatusBadge";
 
 function Navbar({ onMenuClick, title }) {
   const { user, logout } = useAuth();
@@ -34,6 +35,7 @@ function Navbar({ onMenuClick, title }) {
       </div>
 
       <div className="flex items-center gap-3 ml-auto">
+        <AIStatusBadge className="hidden md:inline-flex" />
         <div className="flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-full bg-white/5 border border-white/10">
           <div className="h-8 w-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center text-white text-sm font-bold">
             {user?.name ? user.name[0].toUpperCase() : <FiUser size={14} />}

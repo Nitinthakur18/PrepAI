@@ -8,6 +8,12 @@ const qaSchema = new mongoose.Schema(
     answer: { type: String, default: "" },
     score: { type: Number, default: null },
     feedback: { type: String, default: "" },
+    idealAnswerTips: { type: String, default: "" },
+    strengths: { type: [String], default: [] },
+    improvements: { type: [String], default: [] },
+    rubric: { type: Object, default: null },
+    modelAnswer: { type: String, default: "" },
+    durationSec: { type: Number, default: null },
   },
   { _id: false }
 );
@@ -62,6 +68,12 @@ const interviewSchema = new mongoose.Schema(
     summary: {
       type: String,
       default: "",
+    },
+
+    // Final report for mock interviews (category scores, strengths, next steps, AI/engine meta)
+    report: {
+      type: Object,
+      default: null,
     },
   },
   {

@@ -10,14 +10,19 @@ import {
   FiSettings,
   FiX,
   FiZap,
+  FiMail,
+  FiLayers,
 } from "react-icons/fi";
 
 const links = [
   { to: "/dashboard", label: "Dashboard", icon: FiGrid },
   { to: "/upload", label: "Upload Resume", icon: FiUploadCloud },
-  { to: "/jobdescription", label: "JD Match", icon: FiBriefcase },
-  { to: "/ats", label: "ATS Score", icon: FiTarget },
-  { to: "/interview", label: "Interview Prep", icon: FiMic },
+  { to: "/jobdescription", label: "Job Match", icon: FiTarget },
+  { to: "/ats", label: "Match Report", icon: FiFileText },
+  { to: "/interview", label: "Question Bank", icon: FiLayers },
+  { to: "/mock-interview", label: "Mock Interview", icon: FiMic },
+  { to: "/career-tools", label: "Career Tools", icon: FiMail },
+  { to: "/tracker", label: "Job Tracker", icon: FiBriefcase },
   { to: "/resume-builder", label: "Resume Builder", icon: FiFileText },
   { to: "/history", label: "History", icon: FiClock },
   { to: "/settings", label: "Settings", icon: FiSettings },
@@ -57,7 +62,7 @@ function Sidebar({ open, onClose }) {
           </button>
         </div>
 
-        <nav className="px-4 space-y-1 mt-2">
+        <nav className="px-4 space-y-1 mt-2 overflow-y-auto max-h-[calc(100vh-14rem)]">
           {links.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}

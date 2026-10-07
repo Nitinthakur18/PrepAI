@@ -2,16 +2,21 @@ import { useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
+import ErrorBoundary from "../components/ErrorBoundary";
+import ConnectionBanner from "../components/ConnectionBanner";
 
 const titles = {
   "/dashboard": "Dashboard",
   "/upload": "Upload Resume",
   "/jobdescription": "Job Description Match",
-  "/ats": "ATS Score",
+  "/ats": "Job Match Report",
   "/interview": "Interview Question Generator",
   "/mock-interview": "AI Mock Interview",
   "/resume-builder": "Resume Builder",
   "/history": "History",
+  "/career-tools": "Career Tools",
+  "/tracker": "Job Tracker",
+  "/compare": "Compare Resumes",
   "/settings": "Settings",
 };
 
@@ -23,7 +28,9 @@ function DashboardLayout() {
     titles[location.pathname] ||
     (location.pathname.startsWith("/mock-interview")
       ? "AI Mock Interview"
-      : "PrepAI");
+      : location.pathname.startsWith("/resume/")
+        ? "Resume Report"
+        : "PrepAI");
 
   return (
     <div className="min-h-screen flex bg-bg bg-grid">
@@ -33,9 +40,12 @@ function DashboardLayout() {
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <div className="flex-1 min-w-0 relative">
+        <ConnectionBanner />
         <Navbar onMenuClick={() => setSidebarOpen(true)} title={title} />
         <main className="px-4 sm:px-8 py-8 max-w-7xl mx-auto">
-          <Outlet />
+          <ErrorBoundary key={location.pathname}>
+            <Outlet />
+          </ErrorBoundary>
         </main>
       </div>
     </div>

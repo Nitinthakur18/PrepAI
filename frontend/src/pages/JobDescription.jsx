@@ -1,87 +1,102 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import { FiTarget, FiArrowRight, FiUploadCloud } from "react-icons/fi";
+import { FiTarget, FiFileText } from "react-icons/fi";
 import Button from "../components/Button";
+import ResumeSelect from "../components/ResumeSelect";
+import { Panel } from "../components/ui";
+import useResumes from "../hooks/useResumes";
 import { matchJobDescription } from "../services/resumeService";
+import { getErrorMessage } from "../services/api";
+import { SAMPLE_JD } from "../utils/sampleJD";
+
+const MAX = 20000;
+const inputCls =
+  "w-full rounded-xl bg-[#0b0f1d] border border-white/10 px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-400/60";
 
 function JobDescription() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { resumes, loading, selectedId, setSelectedId, selected } = useResumes();
+  const [jd, setJd] = useState(location.state?.jobDescription || "");
+  const [title, setTitle] = useState(location.state?.jobTitle || "");
+  const [company, setCompany] = useState(location.state?.company || "");
+  const [busy, setBusy] = useState(false);
 
-  const [jobDescription, setJobDescription] = useState("");
-  const [loading, setLoading] = useState(false);
+  const words = jd.trim() ? jd.trim().split(/\s+/).length : 0;
 
-  const handleAnalyze = async () => {
-    const resumeId = localStorage.getItem("resumeId");
-
-    if (!resumeId) {
-      toast.error("Please upload your resume first.");
-      navigate("/upload");
-      return;
-    }
-
-    if (!jobDescription.trim()) {
-      toast.error("Please enter a job description.");
-      return;
-    }
-
+  const analyze = async () => {
+    if (!selectedId) return toast.error("Choose a resume first.");
+    if (jd.trim().length < 40) return toast.error("Paste a fuller job description (a few lines at least).");
+    setBusy(true);
     try {
-      setLoading(true);
-      const res = await matchJobDescription(resumeId, jobDescription);
-      localStorage.setItem("atsResult", JSON.stringify(res.data.data));
-      toast.success("Match analysis ready!");
+      const res = await matchJobDescription(selectedId, jd.trim(), { jobTitle: title.trim(), company: company.trim() });
+      sessionStorage.setItem(
+        "prepai_match",
+        JSON.stringify({
+          result: res.data.data,
+          meta: res.data.meta,
+          resumeId: selectedId,
+          resumeName: selected?.originalName || selected?.filename || "Resume",
+          jobDescription: jd.trim(),
+        })
+      );
       navigate("/ats");
     } catch (err) {
-      toast.error(err.response?.data?.message || "Something went wrong.");
+      toast.error(getErrorMessage(err, "Could not run the match."));
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
   };
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div className="text-center">
-        <div className="inline-flex items-center gap-2 text-indigo-300 mb-3">
-          <FiTarget size={20} />
-          <span className="uppercase text-xs tracking-widest font-semibold">
-            Job Match
-          </span>
-        </div>
-        <h1 className="text-3xl sm:text-4xl font-bold text-white font-display">
-          Paste the Job Description
-        </h1>
-        <p className="text-slate-400 mt-3">
-          We'll compare it against your most recently uploaded resume and
-          calculate keyword coverage.
+      <div>
+        <h2 className="text-2xl sm:text-3xl font-bold text-white font-display">
+          How well do you match <span className="text-gradient">this job?</span>
+        </h2>
+        <p className="text-slate-400 mt-2">
+          Paste a job description. We weight required vs. preferred skills, check experience and education
+          requirements, and show exactly what to fix.
         </p>
       </div>
 
-      <div className="card p-6 sm:p-8">
-        <textarea
-          rows={14}
-          value={jobDescription}
-          onChange={(e) => setJobDescription(e.target.value)}
-          placeholder="Paste the complete job description here..."
-          className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-sm text-slate-200 placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-500/50 transition resize-none"
-        />
+      <Panel title="1 · Choose resume" icon={FiFileText}>
+        <ResumeSelect resumes={resumes} loading={loading} selectedId={selectedId} onChange={setSelectedId} />
+      </Panel>
 
-        <div className="flex flex-col sm:flex-row gap-3 mt-6">
-          <Button
-            onClick={handleAnalyze}
-            disabled={loading}
-            loading={loading}
-            icon={FiArrowRight}
-          >
-            {loading ? "Analyzing..." : "Analyze Match"}
-          </Button>
-          <Button
-            variant="ghost"
-            icon={FiUploadCloud}
-            onClick={() => navigate("/upload")}
-          >
-            Upload a different resume
-          </Button>
+      <Panel
+        title="2 · Job description"
+        icon={FiTarget}
+        right={
+          <button type="button" onClick={() => { setJd(SAMPLE_JD); setTitle("Full Stack Developer"); }} className="text-xs text-indigo-300 hover:text-indigo-200 underline">
+            Use a sample job
+          </button>
+        }
+      >
+        <div className="grid sm:grid-cols-2 gap-3 mb-3">
+          <input className={inputCls} placeholder="Job title (optional)" value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} aria-label="Job title" />
+          <input className={inputCls} placeholder="Company (optional)" value={company} maxLength={120} onChange={(e) => setCompany(e.target.value)} aria-label="Company" />
         </div>
+        <textarea
+          value={jd}
+          maxLength={MAX}
+          onChange={(e) => setJd(e.target.value)}
+          rows={14}
+          placeholder="Paste the full job description here — responsibilities, requirements and nice-to-haves all help."
+          className={`${inputCls} resize-y leading-relaxed`}
+          aria-label="Job description"
+        />
+        <div className="flex items-center justify-between mt-3 text-xs text-slate-500">
+          <span>{words} words</span>
+          <span>{jd.length.toLocaleString()} / {MAX.toLocaleString()}</span>
+        </div>
+      </Panel>
+
+      <div className="flex justify-end">
+        <Button onClick={analyze} loading={busy} disabled={!selectedId} icon={FiTarget} className="px-8">
+          Analyze match
+        </Button>
       </div>
     </div>
   );
