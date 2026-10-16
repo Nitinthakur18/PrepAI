@@ -216,6 +216,14 @@ cd frontend && npm run lint
 ```
 
 The suite simulates Gemini 503s, 429s, timeouts, malformed output and a total
+## 🎓 Under the Mentorship of
+
+**[Anjali srivastavaa]** 
+
+## 👨‍💻 Developed By
+
+- **Nitin Thakur**
+- **Priti Yadav**
 outage, and verifies every endpoint still succeeds. It also covers upload
 (real PDF extraction), ownership/IDOR protection and the engine's scoring.
 
